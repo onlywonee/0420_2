@@ -72,20 +72,21 @@
       }
 
       .route-name {
-        font-size: 0.95rem;
+        font-size: 1.24rem;
         font-weight: 700;
+        letter-spacing: 0.01em;
       }
 
       .sub {
-        font-size: 0.8rem;
+        font-size: 1rem;
         color: var(--muted);
       }
 
       .badge {
-        font-size: 0.78rem;
+        font-size: 0.95rem;
         border-radius: 999px;
         border: 1px solid #3a4558;
-        padding: 5px 10px;
+        padding: 7px 13px;
         color: #cae6ff;
       }
 
@@ -105,15 +106,15 @@
 
       .status-card h3 {
         margin: 0;
-        font-size: 0.95rem;
+        font-size: 1.14rem;
       }
 
       .status-log {
         margin: 0;
-        font-size: 0.85rem;
-        line-height: 1.35;
+        font-size: 1rem;
+        line-height: 1.5;
         color: #dbe8f8;
-        min-height: 42px;
+        min-height: 52px;
       }
 
       .confirm {
@@ -137,9 +138,10 @@
         background: #212935;
         color: var(--text);
         border-radius: 10px;
-        padding: 7px 10px;
+        padding: 10px 14px;
         cursor: pointer;
-        font-size: 0.82rem;
+        font-size: 0.95rem;
+        font-weight: 600;
       }
 
       button.primary {
@@ -180,12 +182,14 @@
 
       textarea {
         width: 100%;
-        min-height: 88px;
+        min-height: 108px;
         border-radius: 10px;
         border: 1px solid #384458;
         background: #131924;
         color: var(--text);
-        padding: 10px;
+        padding: 12px;
+        font-size: 0.98rem;
+        line-height: 1.45;
         resize: vertical;
       }
 
@@ -197,13 +201,13 @@
         border-radius: 99px;
         padding: 5px 9px;
         color: #cde7ff;
-        font-size: 0.77rem;
+        font-size: 0.92rem;
       }
 
       .kv {
         display: grid;
         grid-template-columns: 88px 1fr;
-        font-size: 0.82rem;
+        font-size: 0.98rem;
         gap: 4px 8px;
       }
 
@@ -227,7 +231,7 @@
         border: 1px solid var(--line);
         border-radius: 12px;
         padding: 10px;
-        font-size: 0.75rem;
+        font-size: 0.9rem;
         z-index: 1000;
         display: grid;
         gap: 6px;
@@ -253,9 +257,25 @@
         border: 1px solid #333c4b;
         border-radius: 10px;
         padding: 8px 10px;
-        font-size: 0.76rem;
+        font-size: 0.92rem;
         z-index: 1000;
         color: #c9d5e8;
+      }
+
+      .selected-glow {
+        animation: pulseGlow 1.35s ease-in-out infinite;
+      }
+
+      @keyframes pulseGlow {
+        0% {
+          opacity: 0.55;
+        }
+        50% {
+          opacity: 0.95;
+        }
+        100% {
+          opacity: 0.55;
+        }
       }
 
       @media (max-width: 1080px) {
@@ -348,8 +368,10 @@
         selectedLatLngs: [],
         selectedMarkers: [],
         selectionLine: null,
-        avoidRoute: null,
-        taggedMarker: null,
+        selectionGlowLine: null,
+        avoidRoutes: [],
+        latestAvoidRoute: null,
+        taggedMarkers: [],
         personalizationMode: false,
       };
 
@@ -428,7 +450,9 @@
         state.selectedMarkers.forEach((m) => map.removeLayer(m));
         state.selectedMarkers = [];
         if (state.selectionLine) map.removeLayer(state.selectionLine);
+        if (state.selectionGlowLine) map.removeLayer(state.selectionGlowLine);
         state.selectionLine = null;
+        state.selectionGlowLine = null;
         confirmBox.classList.remove("show");
       }
 
@@ -445,10 +469,19 @@
         const chunk = state.baseRoute.slice(a, b + 1);
         state.selectedLatLngs = chunk;
         if (state.selectionLine) map.removeLayer(state.selectionLine);
+        if (state.selectionGlowLine) map.removeLayer(state.selectionGlowLine);
+        state.selectionGlowLine = L.polyline(chunk, {
+          color: "#ffd166",
+          weight: 19,
+          opacity: 0.45,
+          lineCap: "round",
+          className: "selected-glow",
+        }).addTo(map);
         state.selectionLine = L.polyline(chunk, {
           color: "#ffd166",
           weight: 9,
           opacity: 0.95,
+          lineCap: "round",
         }).addTo(map);
 
         setStatus("3단계: 선택한 구간을 확인했습니다. 태깅 여부를 선택해 주세요.");
@@ -568,18 +601,18 @@
           const diffMin = (rerouteSec - state.baseSeconds) / 60;
 
           if (diffMin <= intent.maxDelayMin) {
-            if (state.avoidRoute) map.removeLayer(state.avoidRoute);
             const latlngs = reroute.geometry.coordinates.map((c) => [c[1], c[0]]);
-            state.avoidRoute = L.polyline(latlngs, {
+            const newAvoidRoute = L.polyline(latlngs, {
               color: "#48d68a",
               weight: 7,
               opacity: 0.85,
               dashArray: "10 8",
             }).addTo(map);
+            state.avoidRoutes.push(newAvoidRoute);
+            state.latestAvoidRoute = newAvoidRoute;
 
-            if (state.taggedMarker) map.removeLayer(state.taggedMarker);
             const mid = state.selectedLatLngs[Math.floor(state.selectedLatLngs.length / 2)];
-            state.taggedMarker = L.marker(mid, {
+            const taggedMarker = L.marker(mid, {
               icon: L.divIcon({
                 html: '<div class="tag-icon">🏷</div>',
                 className: "",
@@ -589,8 +622,9 @@
             })
               .addTo(map)
               .bindPopup(`${intent.reason}<br/>허용 지연: ${intent.maxDelayMin}분`);
+            state.taggedMarkers.push(taggedMarker);
 
-            kvTag.textContent = "적용 완료";
+            kvTag.textContent = `적용 완료 (${state.taggedMarkers.length}개 태그)`;
             finalPrompt.textContent = `8단계: 회피 경로 생성 완료 (+${diffMin.toFixed(1)}분). 이 경로로 출발하시겠습니까?`;
             setStatus("7~8단계: 태그 고정 및 회피 경로 제안 완료.");
             routeDecisionBox.classList.add("show");
@@ -670,16 +704,19 @@
         routeDecisionBox.classList.remove("show");
         setStatus("회피 경로로 안내를 시작합니다. 안전 운전하세요.");
         finalPrompt.textContent = "회피 경로를 확정했습니다. 바로 출발 가능합니다.";
+        resetSelection();
       });
 
       routeNo.addEventListener("click", () => {
         routeDecisionBox.classList.remove("show");
-        if (state.avoidRoute) {
-          map.removeLayer(state.avoidRoute);
-          state.avoidRoute = null;
+        if (state.latestAvoidRoute) {
+          map.removeLayer(state.latestAvoidRoute);
+          state.avoidRoutes = state.avoidRoutes.filter((line) => line !== state.latestAvoidRoute);
+          state.latestAvoidRoute = null;
         }
         finalPrompt.textContent = "기본 경로를 유지합니다. 필요하면 구간을 다시 태깅해 주세요.";
         setStatus("회피 경로 제안을 취소하고 기본 경로를 유지합니다.");
+        resetSelection();
       });
 
       initializeBaseRoute();
