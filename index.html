@@ -62,7 +62,7 @@
         background: rgba(15, 19, 27, 0.86);
         border: 1px solid var(--line);
         border-radius: 14px;
-        padding: 10px 14px;
+        padding: 14px 18px;
         z-index: 1000;
         backdrop-filter: blur(10px);
         display: flex;
@@ -72,18 +72,18 @@
       }
 
       .route-name {
-        font-size: 1.24rem;
+        font-size: 1.44rem;
         font-weight: 700;
         letter-spacing: 0.01em;
       }
 
       .sub {
-        font-size: 1rem;
+        font-size: 1.08rem;
         color: var(--muted);
       }
 
       .badge {
-        font-size: 0.95rem;
+        font-size: 1.04rem;
         border-radius: 999px;
         border: 1px solid #3a4558;
         padding: 7px 13px;
@@ -94,7 +94,7 @@
         position: absolute;
         left: 16px;
         bottom: 18px;
-        width: min(420px, 42%);
+        width: min(500px, 48%);
         background: rgba(16, 22, 30, 0.9);
         border: 1px solid var(--line);
         border-radius: 14px;
@@ -106,12 +106,12 @@
 
       .status-card h3 {
         margin: 0;
-        font-size: 1.14rem;
+        font-size: 1.25rem;
       }
 
       .status-log {
         margin: 0;
-        font-size: 1rem;
+        font-size: 1.12rem;
         line-height: 1.5;
         color: #dbe8f8;
         min-height: 52px;
@@ -251,13 +251,13 @@
 
       .guide {
         position: absolute;
-        top: 76px;
+        top: 104px;
         left: 16px;
         background: rgba(12, 15, 21, 0.86);
         border: 1px solid #333c4b;
         border-radius: 10px;
-        padding: 8px 10px;
-        font-size: 0.92rem;
+        padding: 10px 12px;
+        font-size: 1rem;
         z-index: 1000;
         color: #c9d5e8;
       }
@@ -348,11 +348,11 @@
         <div class="badge" id="modeBadge">기본 주행 모드</div>
       </div>
 
-      <div class="guide">루트를 1초 이상 꾹 누르면 <b>구간 개인화 모드</b>가 켜집니다.</div>
+      <div class="guide">경로를 길게 누르면 <b>구간 개인화 모드</b>가 켜집니다.</div>
 
       <aside class="status-card">
-        <h3>플로우 진행 상태</h3>
-        <p class="status-log" id="statusLog">1단계: 기본 경로를 불러오는 중입니다...</p>
+        <h3>주행 안내</h3>
+        <p class="status-log" id="statusLog">경로를 불러오는 중입니다...</p>
 
         <div class="confirm" id="confirmBox">
           <span>해당 구간에 태깅하시겠습니까?</span>
@@ -460,6 +460,7 @@
       const rerouteNo = document.getElementById("rerouteNo");
 
       let baseLine;
+      let baseHitLine;
       let pressTimer = null;
       let longPressed = false;
 
@@ -547,7 +548,7 @@
           className: "selected-glow-core",
         }).addTo(map);
 
-        setStatus("3단계: 선택한 구간을 확인했습니다. 태깅 여부를 선택해 주세요.");
+        setStatus("선택 구간을 확인했습니다. 태깅 여부를 선택해 주세요.");
         confirmBox.classList.add("show");
       }
 
@@ -589,13 +590,18 @@
             weight: 8,
             opacity: 0.9,
           }).addTo(map);
+          baseHitLine = L.polyline(state.baseRoute, {
+            color: "#33b4ff",
+            weight: 24,
+            opacity: 0.01,
+          }).addTo(map);
 
           L.marker(START).addTo(map).bindPopup("출발: 국민대학교");
           L.marker(END).addTo(map).bindPopup("도착: 경복궁");
           map.fitBounds(baseLine.getBounds(), { padding: [30, 30] });
 
-          setStatus(`1단계: 기본 경로 표시 완료 (예상 ${formatMin(state.baseSeconds)})`);
-          wireLongPress(baseLine);
+          setStatus(`기본 경로 안내 준비 완료 (예상 ${formatMin(state.baseSeconds)})`);
+          wireLongPress(baseHitLine);
         } catch (err) {
           setStatus(`경로 로딩 실패: ${err.message}`);
         }
@@ -607,7 +613,7 @@
           pressTimer = setTimeout(() => {
             longPressed = true;
             setPersonalizationMode(true);
-            setStatus("2단계: 개인화 모드 활성화. 깃발 2개로 범위를 선택하세요.");
+            setStatus("개인화 모드가 켜졌습니다. 깃발 2개로 구간 범위를 선택하세요.");
             resetSelection();
             map.setZoom(Math.max(map.getZoom(), 15));
           }, 1000);
@@ -695,7 +701,7 @@
 
       confirmYes.addEventListener("click", () => {
         confirmBox.classList.remove("show");
-        setStatus("4단계: AI 에이전트 패널을 여는 중...");
+        setStatus("AI 에이전트를 열고 구간 정보를 준비합니다.");
         agentPanel.classList.add("show");
       });
 
@@ -718,14 +724,14 @@
         recognition.interimResults = false;
         recognition.maxAlternatives = 1;
 
-        setStatus("5단계: 음성 입력을 듣고 있습니다...");
+        setStatus("음성 입력을 듣고 있습니다...");
         voiceBtn.disabled = true;
         voiceBtn.textContent = "듣는 중...";
 
         recognition.onresult = (event) => {
           const transcript = event.results[0][0].transcript;
           speechText.value = transcript;
-          setStatus(`6단계: 발화 해석 준비 완료 - “${transcript}”`);
+          setStatus(`발화 인식 완료: “${transcript}”`);
         };
 
         recognition.onerror = () => {
@@ -755,7 +761,7 @@
         const midpoint = state.selectedLatLngs[Math.floor(state.selectedLatLngs.length / 2)];
         state.pendingIntent = intent;
         state.pendingMidpoint = midpoint;
-        setStatus("6단계: LLM이 발화를 해석하고 태그 확인 중...");
+        setStatus("입력 내용을 해석하고 태그 정보를 정리하고 있습니다.");
         kvReason.textContent = intent.reason;
         kvDelay.textContent = `${intent.maxDelayMin}분 이내 우회 허용`;
         llmSummary.textContent = `LLM 해석: “${intent.reason}” 구간, ${intent.maxDelayMin}분 이내 우회 선호`;
@@ -769,7 +775,7 @@
         if (!state.pendingIntent || !state.pendingMidpoint) return;
         addTaggedMarker(state.pendingIntent, state.pendingMidpoint);
         kvTag.textContent = `적용 완료 (${state.taggedMarkers.length}개 태그)`;
-        setStatus("7단계: 태그 고정 완료. 경로 재설정 여부를 선택해 주세요.");
+        setStatus("태그를 저장했습니다. 경로 재설정 여부를 선택해 주세요.");
         finalPrompt.textContent = "해당 태깅을 반영하여 경로를 재설정할 수 있습니다.";
         tagFinalizeBox.classList.remove("show");
         rerouteDecisionBox.classList.add("show");
@@ -788,7 +794,7 @@
       rerouteYes.addEventListener("click", async () => {
         if (!state.pendingIntent) return;
         rerouteDecisionBox.classList.remove("show");
-        setStatus("8단계: 태깅 반영 경로를 재설정하는 중...");
+        setStatus("태깅을 반영해 경로를 다시 계산하는 중입니다.");
         await applyRerouteFromTag(state.pendingIntent);
         state.pendingIntent = null;
         state.pendingMidpoint = null;
