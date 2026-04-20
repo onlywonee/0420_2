@@ -31,7 +31,7 @@
 
       body {
         margin: 0;
-        background: radial-gradient(circle at top, #1a2331 0%, var(--bg) 55%);
+        background: radial-gradient(circle at 18% 10%, #273349 0%, #121722 36%, #0b0f16 76%);
         color: var(--text);
         min-height: 100vh;
         display: grid;
@@ -45,13 +45,39 @@
         border-radius: 18px;
         overflow: hidden;
         position: relative;
-        background: #0c1017;
-        box-shadow: 0 15px 50px rgba(0, 0, 0, 0.5);
+        background: linear-gradient(160deg, #0f1521 0%, #0c111a 48%, #12111f 100%);
+        box-shadow: 0 18px 70px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(94, 153, 255, 0.16);
       }
 
       #map {
         width: 100%;
         height: 100%;
+        filter: saturate(1.08) contrast(1.04);
+      }
+
+      .ambient {
+        position: absolute;
+        width: 38%;
+        aspect-ratio: 1/1;
+        border-radius: 999px;
+        filter: blur(34px);
+        opacity: 0.33;
+        pointer-events: none;
+        z-index: 200;
+      }
+
+      .ambient.a1 {
+        top: -10%;
+        left: -8%;
+        background: radial-gradient(circle, #61b9ff 0%, rgba(97, 185, 255, 0) 68%);
+        animation: ambientMove1 8s ease-in-out infinite alternate;
+      }
+
+      .ambient.a2 {
+        bottom: -14%;
+        right: -10%;
+        background: radial-gradient(circle, #8f84ff 0%, rgba(143, 132, 255, 0) 70%);
+        animation: ambientMove2 10s ease-in-out infinite alternate;
       }
 
       .top-bar {
@@ -59,8 +85,8 @@
         left: 16px;
         right: 16px;
         top: 12px;
-        background: rgba(15, 19, 27, 0.86);
-        border: 1px solid var(--line);
+        background: linear-gradient(135deg, rgba(25, 34, 48, 0.84), rgba(14, 19, 29, 0.84));
+        border: 1px solid rgba(120, 160, 220, 0.35);
         border-radius: 14px;
         padding: 14px 18px;
         z-index: 1000;
@@ -85,9 +111,11 @@
       .badge {
         font-size: 1.04rem;
         border-radius: 999px;
-        border: 1px solid #3a4558;
+        border: 1px solid rgba(120, 188, 255, 0.6);
         padding: 7px 13px;
-        color: #cae6ff;
+        color: #d8efff;
+        background: linear-gradient(145deg, rgba(18, 60, 99, 0.65), rgba(16, 48, 77, 0.35));
+        box-shadow: inset 0 0 18px rgba(83, 170, 255, 0.22);
       }
 
       .status-card {
@@ -95,8 +123,8 @@
         left: 16px;
         bottom: 18px;
         width: min(500px, 48%);
-        background: rgba(16, 22, 30, 0.9);
-        border: 1px solid var(--line);
+        background: linear-gradient(160deg, rgba(16, 22, 32, 0.9), rgba(16, 21, 34, 0.78));
+        border: 1px solid rgba(111, 145, 206, 0.42);
         border-radius: 14px;
         z-index: 1000;
         padding: 14px;
@@ -134,8 +162,8 @@
       }
 
       button {
-        border: 1px solid #3a4455;
-        background: #212935;
+        border: 1px solid rgba(109, 142, 194, 0.65);
+        background: linear-gradient(160deg, #202938, #1b2230);
         color: var(--text);
         border-radius: 10px;
         padding: 10px 14px;
@@ -145,8 +173,9 @@
       }
 
       button.primary {
-        border-color: #3cb8ff;
-        background: #0e5a8b;
+        border-color: #58c7ff;
+        background: linear-gradient(150deg, #0d79b8, #0e4b76);
+        box-shadow: 0 5px 20px rgba(40, 149, 215, 0.35), inset 0 0 16px rgba(159, 222, 255, 0.22);
       }
 
       button.ghost {
@@ -154,7 +183,8 @@
       }
 
       button:hover {
-        filter: brightness(1.08);
+        filter: brightness(1.12);
+        transform: translateY(-1px);
       }
 
       .agent-panel {
@@ -163,8 +193,8 @@
         right: 0;
         bottom: 0;
         padding: 18px;
-        background: linear-gradient(180deg, rgba(18, 23, 32, 0.1), rgba(9, 12, 17, 0.96) 18%);
-        border-top: 1px solid #2d3545;
+        background: linear-gradient(180deg, rgba(18, 23, 32, 0.06), rgba(10, 15, 24, 0.97) 18%);
+        border-top: 1px solid rgba(113, 152, 217, 0.4);
         transform: translateY(105%);
         transition: transform 0.35s ease;
         z-index: 1200;
@@ -215,9 +245,9 @@
         width: 26px;
         height: 26px;
         border-radius: 50%;
-        background: #1f7fc1;
-        border: 2px solid #a0ddff;
-        box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.35);
+        background: radial-gradient(circle at 30% 30%, #79dbff, #2f86ff 62%, #2256cc 100%);
+        border: 2px solid #dcf3ff;
+        box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.35), 0 0 16px rgba(88, 173, 255, 0.8);
         display: grid;
         place-items: center;
         font-size: 13px;
@@ -227,8 +257,8 @@
         position: absolute;
         right: 16px;
         bottom: 16px;
-        background: rgba(14, 18, 25, 0.88);
-        border: 1px solid var(--line);
+        background: linear-gradient(145deg, rgba(14, 18, 25, 0.9), rgba(14, 21, 34, 0.85));
+        border: 1px solid rgba(104, 141, 202, 0.36);
         border-radius: 12px;
         padding: 10px;
         font-size: 0.9rem;
@@ -326,6 +356,24 @@
         }
       }
 
+      @keyframes ambientMove1 {
+        from {
+          transform: translate3d(0, 0, 0) scale(1);
+        }
+        to {
+          transform: translate3d(20px, -10px, 0) scale(1.07);
+        }
+      }
+
+      @keyframes ambientMove2 {
+        from {
+          transform: translate3d(0, 0, 0) scale(1);
+        }
+        to {
+          transform: translate3d(-18px, 12px, 0) scale(1.08);
+        }
+      }
+
       @media (max-width: 1080px) {
         .agent-grid {
           grid-template-columns: 1fr;
@@ -339,6 +387,8 @@
   <body>
     <main id="app">
       <div id="map"></div>
+      <div class="ambient a1"></div>
+      <div class="ambient a2"></div>
 
       <div class="top-bar">
         <div>
