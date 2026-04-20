@@ -348,7 +348,7 @@
         <div class="badge" id="modeBadge">기본 주행 모드</div>
       </div>
 
-      <div class="guide">경로를 길게 누르면 <b>구간 개인화 모드</b>가 켜집니다.</div>
+      <div class="guide">경로를 <b>더블 터치(더블 클릭)</b>하면 구간 개인화 모드가 켜집니다.</div>
 
       <aside class="status-card">
         <h3>주행 안내</h3>
@@ -429,10 +429,11 @@
         taggedMarkers: [],
         pendingIntent: null,
         pendingMidpoint: null,
+        justActivatedUntil: 0,
         personalizationMode: false,
       };
 
-      const map = L.map("map", { zoomControl: true }).setView([37.595, 127.015], 13);
+      const map = L.map("map", { zoomControl: true, doubleClickZoom: false }).setView([37.595, 127.015], 13);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: '&copy; OpenStreetMap 기여자',
@@ -461,8 +462,7 @@
 
       let baseLine;
       let baseHitLine;
-      let pressTimer = null;
-      let longPressed = false;
+      let lastTapTs = 0;
 
       function setStatus(text) {
         statusLog.textContent = text;
@@ -601,30 +601,34 @@
           map.fitBounds(baseLine.getBounds(), { padding: [30, 30] });
 
           setStatus(`기본 경로 안내 준비 완료 (예상 ${formatMin(state.baseSeconds)})`);
-          wireLongPress(baseHitLine);
+          wirePersonalizationTrigger(baseHitLine);
         } catch (err) {
           setStatus(`경로 로딩 실패: ${err.message}`);
         }
       }
 
-      function wireLongPress(polyline) {
-        polyline.on("mousedown", (e) => {
-          longPressed = false;
-          pressTimer = setTimeout(() => {
-            longPressed = true;
-            setPersonalizationMode(true);
-            setStatus("개인화 모드가 켜졌습니다. 깃발 2개로 구간 범위를 선택하세요.");
-            resetSelection();
-            map.setZoom(Math.max(map.getZoom(), 15));
-          }, 1000);
-        });
+      function activatePersonalizationMode() {
+        setPersonalizationMode(true);
+        setStatus("개인화 모드가 켜졌습니다. 깃발 2개로 구간 범위를 선택하세요.");
+        resetSelection();
+        map.setZoom(Math.max(map.getZoom(), 15));
+        state.justActivatedUntil = Date.now() + 250;
+      }
 
-        map.on("mouseup", () => {
-          if (pressTimer) clearTimeout(pressTimer);
+      function wirePersonalizationTrigger(polyline) {
+        polyline.on("click", () => {
+          const now = Date.now();
+          if (now - lastTapTs <= 340) {
+            activatePersonalizationMode();
+            lastTapTs = 0;
+            return;
+          }
+          lastTapTs = now;
         });
 
         map.on("click", (e) => {
           if (!state.personalizationMode) return;
+          if (Date.now() < state.justActivatedUntil) return;
           if (state.selectedIndexes.length >= 2) return;
 
           const idx = nearestRouteIndex(e.latlng);
