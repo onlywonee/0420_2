@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>구간 태깅 내비게이션 프로토타입</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0e1116;
+        --panel: #171b22;
+        --line: #2b3240;
+        --brand: #35b5ff;
+        --good: #45d483;
+        --warn: #ffb648;
+        --bad: #ff6161;
+        --text: #f2f6fc;
+        --muted: #a9b3c3;
+      }
+
+      * {
+        box-sizing: border-box;
+        font-family: "Pretendard", "Noto Sans KR", system-ui, sans-serif;
+      }
+
+      body {
+        margin: 0;
+        background: radial-gradient(circle at top, #1a2331 0%, var(--bg) 55%);
+        color: var(--text);
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+      }
+
+      #app {
+        width: min(95vw, 1400px);
+        aspect-ratio: 1700 / 1184;
+        border: 1px solid #2f3747;
+        border-radius: 18px;
+        overflow: hidden;
+        position: relative;
+        background: #0c1017;
+        box-shadow: 0 15px 50px rgba(0, 0, 0, 0.5);
+      }
+
+      #map {
+        width: 100%;
+        height: 100%;
+      }
+
+      .top-bar {
+        position: absolute;
+        left: 16px;
+        right: 16px;
+        top: 12px;
+        background: rgba(15, 19, 27, 0.86);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px 18px;
+        z-index: 1000;
+        backdrop-filter: blur(10px);
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .route-name {
+        font-size: 1.44rem;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+      }
+
+      .sub {
+        font-size: 1.08rem;
+        color: var(--muted);
+      }
+
+      .badge {
+        font-size: 1.04rem;
+        border-radius: 999px;
+        border: 1px solid #3a4558;
+        padding: 7px 13px;
+        color: #cae6ff;
+      }
+
+      .status-card {
+        position: absolute;
+        left: 16px;
+        bottom: 18px;
+        width: min(500px, 48%);
+        background: rgba(16, 22, 30, 0.9);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        z-index: 1000;
+        padding: 14px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .status-card h3 {
+        margin: 0;
+        font-size: 1.25rem;
+      }
+
+      .status-log {
+        margin: 0;
+        font-size: 1.12rem;
+        line-height: 1.5;
+        color: #dbe8f8;
+        min-height: 52px;
+      }
+
+      .confirm {
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .confirm.show {
+        display: flex;
+      }
+
+      .btn-row {
+        display: flex;
+        gap: 8px;
+      }
+
+      button {
+        border: 1px solid #3a4455;
+        background: #212935;
+        color: var(--text);
+        border-radius: 10px;
+        padding: 10px 14px;
+        cursor: pointer;
+        font-size: 0.95rem;
+        font-weight: 600;
+      }
+
+      button.primary {
+        border-color: #3cb8ff;
+        background: #0e5a8b;
+      }
+
+      button.ghost {
+        background: transparent;
+      }
+
+      button:hover {
+        filter: brightness(1.08);
+      }
+
+      .agent-panel {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 18px;
+        background: linear-gradient(180deg, rgba(18, 23, 32, 0.1), rgba(9, 12, 17, 0.96) 18%);
+        border-top: 1px solid #2d3545;
+        transform: translateY(105%);
+        transition: transform 0.35s ease;
+        z-index: 1200;
+      }
+
+      .agent-panel.show {
+        transform: translateY(0);
+      }
+
+      .agent-grid {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr;
+        gap: 14px;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 108px;
+        border-radius: 10px;
+        border: 1px solid #384458;
+        background: #131924;
+        color: var(--text);
+        padding: 12px;
+        font-size: 0.98rem;
+        line-height: 1.45;
+        resize: vertical;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid #415069;
+        border-radius: 99px;
+        padding: 5px 9px;
+        color: #cde7ff;
+        font-size: 0.92rem;
+      }
+
+      .kv {
+        display: grid;
+        grid-template-columns: 88px 1fr;
+        font-size: 0.98rem;
+        gap: 4px 8px;
+      }
+
+      .tag-icon {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: #1f7fc1;
+        border: 2px solid #a0ddff;
+        box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.35);
+        display: grid;
+        place-items: center;
+        font-size: 13px;
+      }
+
+      .legend {
+        position: absolute;
+        right: 16px;
+        bottom: 16px;
+        background: rgba(14, 18, 25, 0.88);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px;
+        font-size: 0.9rem;
+        z-index: 1000;
+        display: grid;
+        gap: 6px;
+      }
+
+      .legend-line {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .line-chip {
+        width: 28px;
+        height: 5px;
+        border-radius: 99px;
+      }
+
+      .guide {
+        position: absolute;
+        top: 104px;
+        left: 16px;
+        background: rgba(12, 15, 21, 0.86);
+        border: 1px solid #333c4b;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 1rem;
+        z-index: 1000;
+        color: #c9d5e8;
+      }
+
+      .selected-glow {
+        animation: pulseGlow 1.35s ease-in-out infinite;
+      }
+
+      .leaflet-interactive.selected-glow-outer {
+        stroke: #b5f7ff;
+        stroke-opacity: 0.38;
+        filter: drop-shadow(0 0 7px rgba(113, 231, 255, 0.88)) drop-shadow(0 0 18px rgba(119, 147, 255, 0.62));
+        animation: auroraPulse 2.2s ease-in-out infinite;
+      }
+
+      .leaflet-interactive.selected-glow-core {
+        stroke: #ffe083;
+        stroke-opacity: 0.97;
+        stroke-dasharray: 18 12;
+        filter: drop-shadow(0 0 4px rgba(255, 239, 170, 0.9));
+        animation: shimmerMove 1.15s linear infinite, coreBlink 1.8s ease-in-out infinite;
+      }
+
+      @keyframes pulseGlow {
+        0% {
+          opacity: 0.55;
+        }
+        50% {
+          opacity: 0.95;
+        }
+        100% {
+          opacity: 0.55;
+        }
+      }
+
+      @keyframes shimmerMove {
+        0% {
+          stroke-dashoffset: 0;
+        }
+        100% {
+          stroke-dashoffset: -60;
+        }
+      }
+
+      @keyframes auroraPulse {
+        0% {
+          stroke-opacity: 0.28;
+        }
+        50% {
+          stroke-opacity: 0.68;
+        }
+        100% {
+          stroke-opacity: 0.28;
+        }
+      }
+
+      @keyframes coreBlink {
+        0% {
+          stroke: #ffe083;
+        }
+        50% {
+          stroke: #fff7b1;
+        }
+        100% {
+          stroke: #ffd76c;
+        }
+      }
+
+      @media (max-width: 1080px) {
+        .agent-grid {
+          grid-template-columns: 1fr;
+        }
+        .status-card {
+          width: calc(100% - 32px);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main id="app">
+      <div id="map"></div>
+
+      <div class="top-bar">
+        <div>
+          <div class="route-name">국민대학교 → 경복궁</div>
+          <div class="sub">프로토타입 | 구간 태깅 개인화 내비게이션</div>
+        </div>
+        <div class="badge" id="modeBadge">기본 주행 모드</div>
+      </div>
+
+      <div class="guide">경로를 길게 누르면 <b>구간 개인화 모드</b>가 켜집니다.</div>
+
+      <aside class="status-card">
+        <h3>주행 안내</h3>
+        <p class="status-log" id="statusLog">경로를 불러오는 중입니다...</p>
+
+        <div class="confirm" id="confirmBox">
+          <span>해당 구간에 태깅하시겠습니까?</span>
+          <div class="btn-row">
+            <button id="confirmYes" class="primary">예</button>
+            <button id="confirmNo" class="ghost">아니오</button>
+          </div>
+        </div>
+      </aside>
+
+      <section class="agent-panel" id="agentPanel">
+        <div class="agent-grid">
+          <div>
+            <h3 style="margin: 0 0 6px">AI 에이전트 패널</h3>
+            <p class="sub" style="margin-top: 0">
+              음성 또는 텍스트로 구간 맥락을 입력하세요. 예: “냄새 심함, 10분 이내면 우회”
+            </p>
+            <div class="btn-row" style="margin-bottom: 8px">
+              <button id="voiceBtn" class="primary">음성 입력 시작</button>
+              <button id="applyBtn">태그 적용</button>
+            </div>
+            <textarea id="speechText" placeholder="여기에 음성 인식 결과(또는 직접 입력)가 들어갑니다."></textarea>
+          </div>
+          <div>
+            <div class="pill" id="llmSummary">LLM 해석 대기 중</div>
+            <div class="kv" style="margin-top: 10px">
+              <span class="sub">회피 사유</span><strong id="kvReason">-</strong>
+              <span class="sub">허용 지연</span><strong id="kvDelay">-</strong>
+              <span class="sub">태그 상태</span><strong id="kvTag">미적용</strong>
+            </div>
+            <p class="sub" id="finalPrompt" style="margin-top: 12px">
+              태그를 적용하면 회피 경로를 재탐색합니다.
+            </p>
+            <div class="confirm" id="tagFinalizeBox" style="margin-top: 8px">
+              <span>태깅을 완료하시겠습니까?</span>
+              <div class="btn-row">
+                <button id="tagFinalizeYes" class="primary">예</button>
+                <button id="tagFinalizeNo" class="ghost">아니오</button>
+              </div>
+            </div>
+            <div class="confirm" id="rerouteDecisionBox" style="margin-top: 8px">
+              <span>해당 태깅을 반영하여 경로를 재설정할까요?</span>
+              <div class="btn-row">
+                <button id="rerouteYes" class="primary">예</button>
+                <button id="rerouteNo" class="ghost">아니오</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="legend">
+        <div class="legend-line"><span class="line-chip" style="background:#33b4ff"></span>기본 경로</div>
+        <div class="legend-line"><span class="line-chip" style="background:#ffd166"></span>선택 구간</div>
+        <div class="legend-line"><span class="line-chip" style="background:#48d68a"></span>회피 경로</div>
+      </div>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script>
+      const START = [37.610971, 127.060157]; // 국민대학교
+      const END = [37.579617, 126.977041]; // 경복궁
+
+      const state = {
+        baseRoute: null,
+        baseSeconds: 0,
+        selectedIndexes: [],
+        selectedLatLngs: [],
+        selectedMarkers: [],
+        selectionLine: null,
+        selectionGlowLine: null,
+        avoidRoutes: [],
+        latestAvoidRoute: null,
+        taggedMarkers: [],
+        pendingIntent: null,
+        pendingMidpoint: null,
+        personalizationMode: false,
+      };
+
+      const map = L.map("map", { zoomControl: true }).setView([37.595, 127.015], 13);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap 기여자',
+      }).addTo(map);
+
+      const statusLog = document.getElementById("statusLog");
+      const modeBadge = document.getElementById("modeBadge");
+      const confirmBox = document.getElementById("confirmBox");
+      const confirmYes = document.getElementById("confirmYes");
+      const confirmNo = document.getElementById("confirmNo");
+      const agentPanel = document.getElementById("agentPanel");
+      const voiceBtn = document.getElementById("voiceBtn");
+      const applyBtn = document.getElementById("applyBtn");
+      const speechText = document.getElementById("speechText");
+      const llmSummary = document.getElementById("llmSummary");
+      const kvReason = document.getElementById("kvReason");
+      const kvDelay = document.getElementById("kvDelay");
+      const kvTag = document.getElementById("kvTag");
+      const finalPrompt = document.getElementById("finalPrompt");
+      const tagFinalizeBox = document.getElementById("tagFinalizeBox");
+      const tagFinalizeYes = document.getElementById("tagFinalizeYes");
+      const tagFinalizeNo = document.getElementById("tagFinalizeNo");
+      const rerouteDecisionBox = document.getElementById("rerouteDecisionBox");
+      const rerouteYes = document.getElementById("rerouteYes");
+      const rerouteNo = document.getElementById("rerouteNo");
+
+      let baseLine;
+      let baseHitLine;
+      let pressTimer = null;
+      let longPressed = false;
+
+      function setStatus(text) {
+        statusLog.textContent = text;
+      }
+
+      function toLngLat(latlng) {
+        return `${latlng[1]},${latlng[0]}`;
+      }
+
+      function formatMin(sec) {
+        return `${Math.round(sec / 60)}분`;
+      }
+
+      async function fetchRoute(coords) {
+        const routePart = coords.map(toLngLat).join(";");
+        const url = `https://router.project-osrm.org/route/v1/driving/${routePart}?overview=full&geometries=geojson&alternatives=false&steps=false`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("경로 API 호출 실패");
+        const json = await res.json();
+        if (!json.routes?.length) throw new Error("경로 없음");
+        return json.routes[0];
+      }
+
+      function lineDistanceSq(a, b) {
+        const dx = a.lat - b.lat;
+        const dy = a.lng - b.lng;
+        return dx * dx + dy * dy;
+      }
+
+      function nearestRouteIndex(latlng) {
+        let bestIdx = 0;
+        let bestDist = Infinity;
+        state.baseRoute.forEach((p, idx) => {
+          const d = lineDistanceSq(latlng, { lat: p[0], lng: p[1] });
+          if (d < bestDist) {
+            bestDist = d;
+            bestIdx = idx;
+          }
+        });
+        return bestIdx;
+      }
+
+      function resetSelection() {
+        state.selectedIndexes = [];
+        state.selectedLatLngs = [];
+        state.selectedMarkers.forEach((m) => map.removeLayer(m));
+        state.selectedMarkers = [];
+        if (state.selectionLine) map.removeLayer(state.selectionLine);
+        if (state.selectionGlowLine) map.removeLayer(state.selectionGlowLine);
+        state.selectionLine = null;
+        state.selectionGlowLine = null;
+        confirmBox.classList.remove("show");
+        tagFinalizeBox.classList.remove("show");
+        rerouteDecisionBox.classList.remove("show");
+      }
+
+      function setPersonalizationMode(on) {
+        state.personalizationMode = on;
+        modeBadge.textContent = on ? "구간 개인화 모드" : "기본 주행 모드";
+        modeBadge.style.borderColor = on ? "#58c8ff" : "#3a4558";
+        modeBadge.style.background = on ? "#124f74" : "transparent";
+      }
+
+      function highlightSelection() {
+        if (state.selectedIndexes.length < 2) return;
+        const [a, b] = [...state.selectedIndexes].sort((x, y) => x - y);
+        const chunk = state.baseRoute.slice(a, b + 1);
+        state.selectedLatLngs = chunk;
+        if (state.selectionLine) map.removeLayer(state.selectionLine);
+        if (state.selectionGlowLine) map.removeLayer(state.selectionGlowLine);
+        state.selectionGlowLine = L.polyline(chunk, {
+          color: "#ffd166",
+          weight: 19,
+          opacity: 0.45,
+          lineCap: "round",
+          className: "selected-glow selected-glow-outer",
+        }).addTo(map);
+        state.selectionLine = L.polyline(chunk, {
+          color: "#ffd166",
+          weight: 9,
+          opacity: 0.95,
+          lineCap: "round",
+          className: "selected-glow-core",
+        }).addTo(map);
+
+        setStatus("선택 구간을 확인했습니다. 태깅 여부를 선택해 주세요.");
+        confirmBox.classList.add("show");
+      }
+
+      function addFlag(latlng, order) {
+        const marker = L.marker(latlng, {
+          icon: L.divIcon({
+            html: `<div style="font-size:22px">${order === 1 ? "🚩" : "🏁"}</div>`,
+            className: "",
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+          }),
+        }).addTo(map);
+        state.selectedMarkers.push(marker);
+      }
+
+      function parseUserIntent(text) {
+        const delayMatch = text.match(/(\d+)\s*분/);
+        const delay = delayMatch ? parseInt(delayMatch[1], 10) : 10;
+
+        let reason = "사용자 지정 위험/불편 구간";
+        if (text.includes("냄새")) reason = "악취 회피";
+        else if (text.includes("막혀") || text.includes("정체")) reason = "정체 회피";
+        else if (text.includes("공사")) reason = "공사 구간 회피";
+
+        return {
+          reason,
+          maxDelayMin: delay,
+          raw: text,
+        };
+      }
+
+      async function initializeBaseRoute() {
+        try {
+          const route = await fetchRoute([START, END]);
+          state.baseSeconds = route.duration;
+          state.baseRoute = route.geometry.coordinates.map((c) => [c[1], c[0]]);
+          baseLine = L.polyline(state.baseRoute, {
+            color: "#33b4ff",
+            weight: 8,
+            opacity: 0.9,
+          }).addTo(map);
+          baseHitLine = L.polyline(state.baseRoute, {
+            color: "#33b4ff",
+            weight: 24,
+            opacity: 0.01,
+          }).addTo(map);
+
+          L.marker(START).addTo(map).bindPopup("출발: 국민대학교");
+          L.marker(END).addTo(map).bindPopup("도착: 경복궁");
+          map.fitBounds(baseLine.getBounds(), { padding: [30, 30] });
+
+          setStatus(`기본 경로 안내 준비 완료 (예상 ${formatMin(state.baseSeconds)})`);
+          wireLongPress(baseHitLine);
+        } catch (err) {
+          setStatus(`경로 로딩 실패: ${err.message}`);
+        }
+      }
+
+      function wireLongPress(polyline) {
+        polyline.on("mousedown", (e) => {
+          longPressed = false;
+          pressTimer = setTimeout(() => {
+            longPressed = true;
+            setPersonalizationMode(true);
+            setStatus("개인화 모드가 켜졌습니다. 깃발 2개로 구간 범위를 선택하세요.");
+            resetSelection();
+            map.setZoom(Math.max(map.getZoom(), 15));
+          }, 1000);
+        });
+
+        map.on("mouseup", () => {
+          if (pressTimer) clearTimeout(pressTimer);
+        });
+
+        map.on("click", (e) => {
+          if (!state.personalizationMode) return;
+          if (state.selectedIndexes.length >= 2) return;
+
+          const idx = nearestRouteIndex(e.latlng);
+          state.selectedIndexes.push(idx);
+          const point = state.baseRoute[idx];
+          addFlag(point, state.selectedIndexes.length);
+
+          if (state.selectedIndexes.length === 2) {
+            highlightSelection();
+          } else {
+            setStatus("구간 시작점을 잡았습니다. 끝점을 선택해 주세요.");
+          }
+        });
+      }
+
+      function calcDetourWaypoint(segment) {
+        const mid = segment[Math.floor(segment.length / 2)];
+        const before = segment[Math.max(Math.floor(segment.length / 2) - 1, 0)] || mid;
+        const dy = mid[0] - before[0];
+        const dx = mid[1] - before[1];
+
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const perpLat = -dx / len;
+        const perpLng = dy / len;
+        const offset = 0.01; // 약 1km 내외 우회 유도
+
+        return [mid[0] + perpLat * offset, mid[1] + perpLng * offset];
+      }
+
+      function addTaggedMarker(intent, midpoint) {
+        const taggedMarker = L.marker(midpoint, {
+          icon: L.divIcon({
+            html: '<div class="tag-icon">🏷</div>',
+            className: "",
+            iconSize: [26, 26],
+            iconAnchor: [13, 13],
+          }),
+        })
+          .addTo(map)
+          .bindPopup(`${intent.reason}<br/>허용 지연: ${intent.maxDelayMin}분`);
+        state.taggedMarkers.push(taggedMarker);
+      }
+
+      async function applyRerouteFromTag(intent) {
+        if (!state.selectedLatLngs.length) return;
+        const detour = calcDetourWaypoint(state.selectedLatLngs);
+
+        try {
+          const reroute = await fetchRoute([START, detour, END]);
+          const rerouteSec = reroute.duration;
+          const diffMin = (rerouteSec - state.baseSeconds) / 60;
+
+          if (diffMin <= intent.maxDelayMin) {
+            const latlngs = reroute.geometry.coordinates.map((c) => [c[1], c[0]]);
+            const newAvoidRoute = L.polyline(latlngs, {
+              color: "#48d68a",
+              weight: 7,
+              opacity: 0.85,
+              dashArray: "10 8",
+            }).addTo(map);
+            state.avoidRoutes.push(newAvoidRoute);
+            state.latestAvoidRoute = newAvoidRoute;
+            finalPrompt.textContent = `태깅을 반영한 회피 경로를 적용했습니다. (약 +${diffMin.toFixed(1)}분)`;
+            setStatus("태깅 반영 경로 재설정이 완료되었습니다.");
+          } else {
+            finalPrompt.textContent = `회피 시 ${diffMin.toFixed(1)}분 증가하여 사용자 기준(${intent.maxDelayMin}분)을 초과했습니다.`;
+            setStatus("재설정 경로는 있으나 허용 지연을 넘어서 기본 경로 유지.");
+          }
+        } catch (err) {
+          finalPrompt.textContent = `경로 재탐색 실패: ${err.message}`;
+          setStatus("회피 경로 계산 중 오류가 발생했습니다.");
+        }
+      }
+
+      confirmYes.addEventListener("click", () => {
+        confirmBox.classList.remove("show");
+        setStatus("AI 에이전트를 열고 구간 정보를 준비합니다.");
+        agentPanel.classList.add("show");
+      });
+
+      confirmNo.addEventListener("click", () => {
+        confirmBox.classList.remove("show");
+        setStatus("선택 구간 태깅을 취소했습니다. 다시 구간을 선택할 수 있습니다.");
+        resetSelection();
+      });
+
+      voiceBtn.addEventListener("click", () => {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) {
+          setStatus("브라우저 음성 인식을 지원하지 않아 텍스트 입력으로 전환합니다.");
+          speechText.focus();
+          return;
+        }
+
+        const recognition = new SR();
+        recognition.lang = "ko-KR";
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        setStatus("음성 입력을 듣고 있습니다...");
+        voiceBtn.disabled = true;
+        voiceBtn.textContent = "듣는 중...";
+
+        recognition.onresult = (event) => {
+          const transcript = event.results[0][0].transcript;
+          speechText.value = transcript;
+          setStatus(`발화 인식 완료: “${transcript}”`);
+        };
+
+        recognition.onerror = () => {
+          setStatus("음성 인식 실패. 텍스트를 직접 입력해 주세요.");
+        };
+
+        recognition.onend = () => {
+          voiceBtn.disabled = false;
+          voiceBtn.textContent = "음성 입력 시작";
+        };
+
+        recognition.start();
+      });
+
+      applyBtn.addEventListener("click", async () => {
+        const raw = speechText.value.trim();
+        if (!raw) {
+          setStatus("먼저 구간 설명(음성/텍스트)을 입력해 주세요.");
+          return;
+        }
+        if (!state.selectedLatLngs.length) {
+          setStatus("먼저 지도에서 구간을 선택해 주세요.");
+          return;
+        }
+
+        const intent = parseUserIntent(raw);
+        const midpoint = state.selectedLatLngs[Math.floor(state.selectedLatLngs.length / 2)];
+        state.pendingIntent = intent;
+        state.pendingMidpoint = midpoint;
+        setStatus("입력 내용을 해석하고 태그 정보를 정리하고 있습니다.");
+        kvReason.textContent = intent.reason;
+        kvDelay.textContent = `${intent.maxDelayMin}분 이내 우회 허용`;
+        llmSummary.textContent = `LLM 해석: “${intent.reason}” 구간, ${intent.maxDelayMin}분 이내 우회 선호`;
+        kvTag.textContent = "태깅 최종 확인 대기";
+        finalPrompt.textContent = "태깅 완료 여부를 먼저 선택해 주세요.";
+        rerouteDecisionBox.classList.remove("show");
+        tagFinalizeBox.classList.add("show");
+      });
+
+      tagFinalizeYes.addEventListener("click", () => {
+        if (!state.pendingIntent || !state.pendingMidpoint) return;
+        addTaggedMarker(state.pendingIntent, state.pendingMidpoint);
+        kvTag.textContent = `적용 완료 (${state.taggedMarkers.length}개 태그)`;
+        setStatus("태그를 저장했습니다. 경로 재설정 여부를 선택해 주세요.");
+        finalPrompt.textContent = "해당 태깅을 반영하여 경로를 재설정할 수 있습니다.";
+        tagFinalizeBox.classList.remove("show");
+        rerouteDecisionBox.classList.add("show");
+      });
+
+      tagFinalizeNo.addEventListener("click", () => {
+        state.pendingIntent = null;
+        state.pendingMidpoint = null;
+        tagFinalizeBox.classList.remove("show");
+        rerouteDecisionBox.classList.remove("show");
+        kvTag.textContent = "태깅 취소";
+        finalPrompt.textContent = "태깅을 취소했습니다. 필요하면 다시 입력해 주세요.";
+        setStatus("태깅 완료를 취소했습니다.");
+      });
+
+      rerouteYes.addEventListener("click", async () => {
+        if (!state.pendingIntent) return;
+        rerouteDecisionBox.classList.remove("show");
+        setStatus("태깅을 반영해 경로를 다시 계산하는 중입니다.");
+        await applyRerouteFromTag(state.pendingIntent);
+        state.pendingIntent = null;
+        state.pendingMidpoint = null;
+        resetSelection();
+      });
+
+      rerouteNo.addEventListener("click", () => {
+        rerouteDecisionBox.classList.remove("show");
+        state.pendingIntent = null;
+        state.pendingMidpoint = null;
+        finalPrompt.textContent = "태깅만 반영하고 경로는 기본 상태로 유지합니다.";
+        setStatus("태깅은 저장하고 경로 재설정은 건너뛰었습니다.");
+        resetSelection();
+      });
+
+      initializeBaseRoute();
+    </script>
+  </body>
+</html>
