@@ -318,6 +318,13 @@
             <p class="sub" id="finalPrompt" style="margin-top: 12px">
               태그를 적용하면 회피 경로를 재탐색합니다.
             </p>
+            <div class="confirm" id="routeDecisionBox" style="margin-top: 8px">
+              <span>이 경로로 출발하시겠습니까?</span>
+              <div class="btn-row">
+                <button id="routeYes" class="primary">예</button>
+                <button id="routeNo" class="ghost">아니오</button>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -366,6 +373,9 @@
       const kvDelay = document.getElementById("kvDelay");
       const kvTag = document.getElementById("kvTag");
       const finalPrompt = document.getElementById("finalPrompt");
+      const routeDecisionBox = document.getElementById("routeDecisionBox");
+      const routeYes = document.getElementById("routeYes");
+      const routeNo = document.getElementById("routeNo");
 
       let baseLine;
       let pressTimer = null;
@@ -583,15 +593,18 @@
             kvTag.textContent = "적용 완료";
             finalPrompt.textContent = `8단계: 회피 경로 생성 완료 (+${diffMin.toFixed(1)}분). 이 경로로 출발하시겠습니까?`;
             setStatus("7~8단계: 태그 고정 및 회피 경로 제안 완료.");
+            routeDecisionBox.classList.add("show");
           } else {
             kvTag.textContent = "기준 초과";
             finalPrompt.textContent = `회피 시 ${diffMin.toFixed(1)}분 증가하여 사용자 기준(${intent.maxDelayMin}분)을 초과했습니다.`;
             setStatus("회피 경로는 있으나 허용 지연을 넘어서 기본 경로 유지.");
+            routeDecisionBox.classList.remove("show");
           }
         } catch (err) {
           kvTag.textContent = "오류";
           finalPrompt.textContent = `경로 재탐색 실패: ${err.message}`;
           setStatus("회피 경로 계산 중 오류가 발생했습니다.");
+          routeDecisionBox.classList.remove("show");
         }
       }
 
@@ -651,6 +664,22 @@
         const intent = parseUserIntent(raw);
         setStatus("6단계: LLM이 발화를 해석하고 태그 확인 중...");
         await applyTagFlow(intent);
+      });
+
+      routeYes.addEventListener("click", () => {
+        routeDecisionBox.classList.remove("show");
+        setStatus("회피 경로로 안내를 시작합니다. 안전 운전하세요.");
+        finalPrompt.textContent = "회피 경로를 확정했습니다. 바로 출발 가능합니다.";
+      });
+
+      routeNo.addEventListener("click", () => {
+        routeDecisionBox.classList.remove("show");
+        if (state.avoidRoute) {
+          map.removeLayer(state.avoidRoute);
+          state.avoidRoute = null;
+        }
+        finalPrompt.textContent = "기본 경로를 유지합니다. 필요하면 구간을 다시 태깅해 주세요.";
+        setStatus("회피 경로 제안을 취소하고 기본 경로를 유지합니다.");
       });
 
       initializeBaseRoute();
