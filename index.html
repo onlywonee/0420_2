@@ -266,6 +266,21 @@
         animation: pulseGlow 1.35s ease-in-out infinite;
       }
 
+      .leaflet-interactive.selected-glow-outer {
+        stroke: #b5f7ff;
+        stroke-opacity: 0.38;
+        filter: drop-shadow(0 0 7px rgba(113, 231, 255, 0.88)) drop-shadow(0 0 18px rgba(119, 147, 255, 0.62));
+        animation: auroraPulse 2.2s ease-in-out infinite;
+      }
+
+      .leaflet-interactive.selected-glow-core {
+        stroke: #ffe083;
+        stroke-opacity: 0.97;
+        stroke-dasharray: 18 12;
+        filter: drop-shadow(0 0 4px rgba(255, 239, 170, 0.9));
+        animation: shimmerMove 1.15s linear infinite, coreBlink 1.8s ease-in-out infinite;
+      }
+
       @keyframes pulseGlow {
         0% {
           opacity: 0.55;
@@ -275,6 +290,39 @@
         }
         100% {
           opacity: 0.55;
+        }
+      }
+
+      @keyframes shimmerMove {
+        0% {
+          stroke-dashoffset: 0;
+        }
+        100% {
+          stroke-dashoffset: -60;
+        }
+      }
+
+      @keyframes auroraPulse {
+        0% {
+          stroke-opacity: 0.28;
+        }
+        50% {
+          stroke-opacity: 0.68;
+        }
+        100% {
+          stroke-opacity: 0.28;
+        }
+      }
+
+      @keyframes coreBlink {
+        0% {
+          stroke: #ffe083;
+        }
+        50% {
+          stroke: #fff7b1;
+        }
+        100% {
+          stroke: #ffd76c;
         }
       }
 
@@ -338,11 +386,18 @@
             <p class="sub" id="finalPrompt" style="margin-top: 12px">
               태그를 적용하면 회피 경로를 재탐색합니다.
             </p>
-            <div class="confirm" id="routeDecisionBox" style="margin-top: 8px">
-              <span>이 경로로 출발하시겠습니까?</span>
+            <div class="confirm" id="tagFinalizeBox" style="margin-top: 8px">
+              <span>태깅을 완료하시겠습니까?</span>
               <div class="btn-row">
-                <button id="routeYes" class="primary">예</button>
-                <button id="routeNo" class="ghost">아니오</button>
+                <button id="tagFinalizeYes" class="primary">예</button>
+                <button id="tagFinalizeNo" class="ghost">아니오</button>
+              </div>
+            </div>
+            <div class="confirm" id="rerouteDecisionBox" style="margin-top: 8px">
+              <span>해당 태깅을 반영하여 경로를 재설정할까요?</span>
+              <div class="btn-row">
+                <button id="rerouteYes" class="primary">예</button>
+                <button id="rerouteNo" class="ghost">아니오</button>
               </div>
             </div>
           </div>
@@ -372,6 +427,8 @@
         avoidRoutes: [],
         latestAvoidRoute: null,
         taggedMarkers: [],
+        pendingIntent: null,
+        pendingMidpoint: null,
         personalizationMode: false,
       };
 
@@ -395,9 +452,12 @@
       const kvDelay = document.getElementById("kvDelay");
       const kvTag = document.getElementById("kvTag");
       const finalPrompt = document.getElementById("finalPrompt");
-      const routeDecisionBox = document.getElementById("routeDecisionBox");
-      const routeYes = document.getElementById("routeYes");
-      const routeNo = document.getElementById("routeNo");
+      const tagFinalizeBox = document.getElementById("tagFinalizeBox");
+      const tagFinalizeYes = document.getElementById("tagFinalizeYes");
+      const tagFinalizeNo = document.getElementById("tagFinalizeNo");
+      const rerouteDecisionBox = document.getElementById("rerouteDecisionBox");
+      const rerouteYes = document.getElementById("rerouteYes");
+      const rerouteNo = document.getElementById("rerouteNo");
 
       let baseLine;
       let pressTimer = null;
@@ -454,6 +514,8 @@
         state.selectionLine = null;
         state.selectionGlowLine = null;
         confirmBox.classList.remove("show");
+        tagFinalizeBox.classList.remove("show");
+        rerouteDecisionBox.classList.remove("show");
       }
 
       function setPersonalizationMode(on) {
@@ -475,13 +537,14 @@
           weight: 19,
           opacity: 0.45,
           lineCap: "round",
-          className: "selected-glow",
+          className: "selected-glow selected-glow-outer",
         }).addTo(map);
         state.selectionLine = L.polyline(chunk, {
           color: "#ffd166",
           weight: 9,
           opacity: 0.95,
           lineCap: "round",
+          className: "selected-glow-core",
         }).addTo(map);
 
         setStatus("3단계: 선택한 구간을 확인했습니다. 태깅 여부를 선택해 주세요.");
@@ -585,14 +648,22 @@
         return [mid[0] + perpLat * offset, mid[1] + perpLng * offset];
       }
 
-      async function applyTagFlow(intent) {
+      function addTaggedMarker(intent, midpoint) {
+        const taggedMarker = L.marker(midpoint, {
+          icon: L.divIcon({
+            html: '<div class="tag-icon">🏷</div>',
+            className: "",
+            iconSize: [26, 26],
+            iconAnchor: [13, 13],
+          }),
+        })
+          .addTo(map)
+          .bindPopup(`${intent.reason}<br/>허용 지연: ${intent.maxDelayMin}분`);
+        state.taggedMarkers.push(taggedMarker);
+      }
+
+      async function applyRerouteFromTag(intent) {
         if (!state.selectedLatLngs.length) return;
-
-        kvReason.textContent = intent.reason;
-        kvDelay.textContent = `${intent.maxDelayMin}분 이내 우회 허용`;
-        kvTag.textContent = "태그 적용 중";
-        llmSummary.textContent = `LLM 해석: “${intent.reason}” 구간, ${intent.maxDelayMin}분 이내 우회 선호`;
-
         const detour = calcDetourWaypoint(state.selectedLatLngs);
 
         try {
@@ -610,35 +681,15 @@
             }).addTo(map);
             state.avoidRoutes.push(newAvoidRoute);
             state.latestAvoidRoute = newAvoidRoute;
-
-            const mid = state.selectedLatLngs[Math.floor(state.selectedLatLngs.length / 2)];
-            const taggedMarker = L.marker(mid, {
-              icon: L.divIcon({
-                html: '<div class="tag-icon">🏷</div>',
-                className: "",
-                iconSize: [26, 26],
-                iconAnchor: [13, 13],
-              }),
-            })
-              .addTo(map)
-              .bindPopup(`${intent.reason}<br/>허용 지연: ${intent.maxDelayMin}분`);
-            state.taggedMarkers.push(taggedMarker);
-
-            kvTag.textContent = `적용 완료 (${state.taggedMarkers.length}개 태그)`;
-            finalPrompt.textContent = `8단계: 회피 경로 생성 완료 (+${diffMin.toFixed(1)}분). 이 경로로 출발하시겠습니까?`;
-            setStatus("7~8단계: 태그 고정 및 회피 경로 제안 완료.");
-            routeDecisionBox.classList.add("show");
+            finalPrompt.textContent = `태깅을 반영한 회피 경로를 적용했습니다. (약 +${diffMin.toFixed(1)}분)`;
+            setStatus("태깅 반영 경로 재설정이 완료되었습니다.");
           } else {
-            kvTag.textContent = "기준 초과";
             finalPrompt.textContent = `회피 시 ${diffMin.toFixed(1)}분 증가하여 사용자 기준(${intent.maxDelayMin}분)을 초과했습니다.`;
-            setStatus("회피 경로는 있으나 허용 지연을 넘어서 기본 경로 유지.");
-            routeDecisionBox.classList.remove("show");
+            setStatus("재설정 경로는 있으나 허용 지연을 넘어서 기본 경로 유지.");
           }
         } catch (err) {
-          kvTag.textContent = "오류";
           finalPrompt.textContent = `경로 재탐색 실패: ${err.message}`;
           setStatus("회피 경로 계산 중 오류가 발생했습니다.");
-          routeDecisionBox.classList.remove("show");
         }
       }
 
@@ -695,27 +746,61 @@
           setStatus("먼저 구간 설명(음성/텍스트)을 입력해 주세요.");
           return;
         }
+        if (!state.selectedLatLngs.length) {
+          setStatus("먼저 지도에서 구간을 선택해 주세요.");
+          return;
+        }
+
         const intent = parseUserIntent(raw);
+        const midpoint = state.selectedLatLngs[Math.floor(state.selectedLatLngs.length / 2)];
+        state.pendingIntent = intent;
+        state.pendingMidpoint = midpoint;
         setStatus("6단계: LLM이 발화를 해석하고 태그 확인 중...");
-        await applyTagFlow(intent);
+        kvReason.textContent = intent.reason;
+        kvDelay.textContent = `${intent.maxDelayMin}분 이내 우회 허용`;
+        llmSummary.textContent = `LLM 해석: “${intent.reason}” 구간, ${intent.maxDelayMin}분 이내 우회 선호`;
+        kvTag.textContent = "태깅 최종 확인 대기";
+        finalPrompt.textContent = "태깅 완료 여부를 먼저 선택해 주세요.";
+        rerouteDecisionBox.classList.remove("show");
+        tagFinalizeBox.classList.add("show");
       });
 
-      routeYes.addEventListener("click", () => {
-        routeDecisionBox.classList.remove("show");
-        setStatus("회피 경로로 안내를 시작합니다. 안전 운전하세요.");
-        finalPrompt.textContent = "회피 경로를 확정했습니다. 바로 출발 가능합니다.";
+      tagFinalizeYes.addEventListener("click", () => {
+        if (!state.pendingIntent || !state.pendingMidpoint) return;
+        addTaggedMarker(state.pendingIntent, state.pendingMidpoint);
+        kvTag.textContent = `적용 완료 (${state.taggedMarkers.length}개 태그)`;
+        setStatus("7단계: 태그 고정 완료. 경로 재설정 여부를 선택해 주세요.");
+        finalPrompt.textContent = "해당 태깅을 반영하여 경로를 재설정할 수 있습니다.";
+        tagFinalizeBox.classList.remove("show");
+        rerouteDecisionBox.classList.add("show");
+      });
+
+      tagFinalizeNo.addEventListener("click", () => {
+        state.pendingIntent = null;
+        state.pendingMidpoint = null;
+        tagFinalizeBox.classList.remove("show");
+        rerouteDecisionBox.classList.remove("show");
+        kvTag.textContent = "태깅 취소";
+        finalPrompt.textContent = "태깅을 취소했습니다. 필요하면 다시 입력해 주세요.";
+        setStatus("태깅 완료를 취소했습니다.");
+      });
+
+      rerouteYes.addEventListener("click", async () => {
+        if (!state.pendingIntent) return;
+        rerouteDecisionBox.classList.remove("show");
+        setStatus("8단계: 태깅 반영 경로를 재설정하는 중...");
+        await applyRerouteFromTag(state.pendingIntent);
+        state.pendingIntent = null;
+        state.pendingMidpoint = null;
         resetSelection();
       });
 
-      routeNo.addEventListener("click", () => {
-        routeDecisionBox.classList.remove("show");
-        if (state.latestAvoidRoute) {
-          map.removeLayer(state.latestAvoidRoute);
-          state.avoidRoutes = state.avoidRoutes.filter((line) => line !== state.latestAvoidRoute);
-          state.latestAvoidRoute = null;
-        }
-        finalPrompt.textContent = "기본 경로를 유지합니다. 필요하면 구간을 다시 태깅해 주세요.";
-        setStatus("회피 경로 제안을 취소하고 기본 경로를 유지합니다.");
+      rerouteNo.addEventListener("click", () => {
+        rerouteDecisionBox.classList.remove("show");
+        state.pendingIntent = null;
+        state.pendingMidpoint = null;
+        finalPrompt.textContent = "태깅만 반영하고 경로는 기본 상태로 유지합니다.";
+        setStatus("태깅은 저장하고 경로 재설정은 건너뛰었습니다.");
         resetSelection();
       });
 
